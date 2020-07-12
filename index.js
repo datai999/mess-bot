@@ -1,66 +1,78 @@
-var express = require('express')
- var bodyParser = require('body-parser')
- var request = require('request')
- var app = express()
- 
- app.set('port', (process.env.PORT || 5000))
- 
- // Process application/x-www-form-urlencoded
- app.use(bodyParser.urlencoded({extended: false}))
- 
- // Process application/json
- app.use(bodyParser.json())
- 
- // Index route
- app.get('/', function (req, res) {
-     res.send('Hello world, I am a chat bot')
- })
- 
- // for Facebook verification
- app.get('/webhook/', function (req, res) {
-     if (req.query['hub.verify_token'] === 'my_voice_is_my_password_verify_me') {
-         res.send(req.query['hub.challenge'])
-     }
-     res.send('Error, wrong token')
- })
- 
- // Spin up the server
- app.listen(app.get('port'), function() {
-     console.log('running on port', app.get('port'))
- })
+// # SimpleServer
+// A simple chat bot server
+var logger = require('morgan');
+var http = require('http');
+var bodyParser = require('body-parser');
+var express = require('express');
+var router = express();
 
- app.post('/webhook/', function (req, res) {
-    messaging_events = req.body.entry[0].messaging
-    for (i = 0; i < messaging_events.length; i++) {
-        event = req.body.entry[0].messaging[i]
-        sender = event.sender.id
-        if (event.message && event.message.text) {
-            text = event.message.text
-            sendTextMessage(sender, "Text received, echo: " + text.substring(0, 200))
+var app = express();
+app.use(logger('dev'));
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({
+  extended: false
+}));
+var server = http.createServer(app);
+var request = require("request");
+
+app.get('/', (req, res) => {
+  res.send("Home page. Server running okay.");
+});
+
+// Đây là đoạn code để tạo Webhook
+app.get('/webhook', function(req, res) {
+  if (req.query['hub.verify_token'] === 'my_voice_is_my_password_verify_me') {
+    res.send(req.query['hub.challenge']);
+  }
+  res.send('Error, wrong validation token');
+});
+
+// Xử lý khi có người nhắn tin cho bot
+app.post('/webhook', function(req, res) {
+  var entries = req.body.entry;
+  for (var entry of entries) {
+    var messaging = entry.messaging;
+    for (var message of messaging) {
+      var senderId = message.sender.id;
+      if (message.message) {
+        // If user send text
+        if (message.message.text) {
+          var text = message.message.text;
+          console.log(text); // In tin nhắn người dùng
+          sendMessage(senderId, "Tui là bot đây: " + text);
         }
+      }
     }
-    res.sendStatus(200)
-})
+  }
 
-var token = EAADZCv9oZAvGUBANb4RAgQMLQJZAH8AuZCKCBrV2qZAvRthz4yN1WuVws2jngC9AE13b8aEMVRTZCzLTRqc0ErfL1PnZACOc1J56QFfZC4FuECUPUePVJTqBVdaQDNQjDVrZC5YA9SI2qs2GRcQrU1hahRkXR2ObNNFD3yZCSjshbDoxI0z5ZChxUID
+  res.status(200).send("OK");
+});
 
-function sendTextMessage(sender, text) {
-    messageData = {
-        text:text
+
+token = EAADZCv9oZAvGUBAKjEYdSPZBBb55LUpiq0rIbU4ZAGX8GQJ3QXZB1XgfuorinXIyrwtVwZAZAMZBAlWckYMQ2jdHD3JbEQwY0367zIr9MBiBbGFHwZCBipbAnao3pfj82M1WZAHEUIm9nA3EqIQdDwxnoaBxvJd3ZBnZAanbZAkdcFM1V1yCQw6lncrxb
+
+// Gửi thông tin tới REST API để trả lời
+function sendMessage(senderId, message) {
+  request({
+    url: 'https://graph.facebook.com/v7.0/me/messages',
+    qs: {
+      access_token: token,
+    },
+    method: 'POST',
+    json: {
+      recipient: {
+        id: senderId
+      },
+      message: {
+        text: message
+      },
     }
-    request({
-        url: 'https://graph.facebook.com/v7.0/me/messages',
-        qs: {access_token:token},
-        method: 'POST',
-        json: {
-            recipient: {id:sender},
-            message: messageData,
-        }
-    }, function(error, response, body) {
-        if (error) {
-            console.log('Error sending messages: ', error)
-        } else if (response.body.error) {
-            console.log('Error: ', response.body.error)
-        }
-    })
+  });
 }
+
+app.set('port', process.env.OPENSHIFT_NODEJS_PORT || process.env.PORT || 3002);
+app.set('ip', process.env.OPENSHIFT_NODEJS_IP || process.env.IP || "127.0.0.1");
+
+server.listen(app.get('port'), app.get('ip'), function() {
+  console.log("Chat bot server listening at %s:%d ", app.get('ip'), app.get('port'));
+});
